@@ -433,6 +433,7 @@ Where  "repo"           Utility is used To simplify fetching sources and setting
 ***************Setting Up Yocto*************** 
 
 The following steps information is also available here : https://docs.yoctoproject.org/brief-yoctoprojectqs/index.html
+https://docs.yoctoproject.org/brief-yoctoprojectqs/
 
 i).  git clone git://git.yoctoproject.org/poky 
 
@@ -526,4 +527,210 @@ Encountered Issues During Yocto Based Linux Image Build For Raspberry Pi3 : http
                                                                             https://github.com/crops/poky-container/issues/67
                                                                             https://docs.yoctoproject.org/next/migration-guides/migration-3.4.html
                                                         Yocto is migrated : https://low-level.wiki/yocto/honister-upgrade.html
+After stopping bitbake in the middle , it won´t work to resolve it do : rm bitbake.lock
+
+
+---------------------------------Lecture 5 : Linux Kernel Modules-------------------------------------------
+
+Linux provides an abstraction to make communication with I/O easy.
+Software developer does not need to know every detail of the physical device.
+Portability can be increased by using the same abstraction for different I/O devices.
+
+Linux recognizes three classes of devices:
+
+Character devices, which are devices that can be accessed as stream of words (e.g., 8-/16-/32-/… bits) as in a file; reading word n requires reading all the preceding words from 0 to n-1.
+
+Block devices, which are devices that can be accessed only as multiples of one block, where a block is 512 bytes of data or more. Typically, block devices host file systems.
+
+Network interfaces, which are in charge of sending and receiving data packets through the network subsystem of the kernel.
+
+----------Virtual File System Abstraction---------------
+
+Character/block devices are accessed as files stored in the file system, as each device is associated with a device file.
+Typical usage:
+
+Open the device file.
+Read/Write data from/to device file.
+Close the device file.
+Linux forwards the open/read/write/close operations to the I/O device associated to the device file.
+The operations for each I/O device are implemented by a custom piece of software in the Linux kernel: the device driver.
+
+The VFS functions available to a user application are declared in the file fs.h include/linux/fs.h , In user level application we will need to include this file.
+
+
+include/linux/fs.h : 
+
+struct file_operations {
+  struct module *owner;
+  loff_t (*llseek) (struct file *, loff_t, int);
+  ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+  ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+  ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
+  ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
+  int (*iterate) (struct file *, struct dir_context *);
+  int (*iterate_shared) (struct file *, struct dir_context *);
+  unsigned int (*poll) (struct file *, struct poll_table_struct *);
+  long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
+  long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
+  int (*mmap) (struct file *, struct vm_area_struct *);
+  int (*open) (struct inode *, struct file *);
+  int (*flush) (struct file *, fl_owner_t id);
+  int (*release) (struct inode *, struct file *);
+  int (*fsync) (struct file *, loff_t, loff_t, int datasync);
+  int (*aio_fsync) (struct kiocb *, int datasync);
+  int (*fasync) (int, struct file *, int);
+  int (*lock) (struct file *, int, struct file_lock *);
+  ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
+  unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
+  int (*check_flags)(int);
+  int (*flock) (struct file *, int, struct file_lock *);
+  ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
+  ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
+  int (*setlease)(struct file *, long, struct file_lock **, void **);
+  long (*fallocate)(struct file *file, int mode, loff_t offset,
+  loff_t len);
+  void (*show_fdinfo)(struct seq_file *m, struct file *f);
+  #ifndef CONFIG_MMU
+    unsigned (*mmap_capabilities)(struct file *);
+  #endif
+  ssize_t (*copy_file_range)(struct file *, loff_t, struct file *,
+  loff_t, size_t, unsigned int);
+  int (*clone_file_range)(struct file *, loff_t, struct file *, loff_t,
+  u64);
+  ssize_t (*dedupe_file_range)(struct file *, u64, u64, struct file *,
+  u64);
+ };
+
+
+
+For character devices the most commonly used VFS functions are the following:
+
+ssize_t (*read) (struct file *, char *__user, size_t, loff_t *): it reads data from a file.
+
+ssize_t (*write) (struct file *,  const char *__user, size_t, loff_t *):  it writes data to a file.
+
+int (*ioctl) (struct *inode, struct file *,  unsigned int, unsigned long): it performs custom operations to the file.
+
+int (*open) ( struct *inode, struct file * ): it prepares a file for use.
+
+int (*release) ( struct inode *, struct file * ): it indicates the file is no longer in use.
+
+
+
+---------------The Device File Concept--------------
+
+The device file is the intermediator through which a user application can exchange data with a device driver.
+
+The device file does not contain any data, while its descriptor contains the relevant information to identify the corresponding driver:
+
+The device file type, which could be either c = character device, b = block device, or p = named pipe (inter-process communication mechanism)
+
+The major number, which is an integer number that identifies univocally a device driver in the Linux kernel
+
+The minor number, which is used to discriminate among multiple instances of I/O devices handled by the same device driver
+
+--------------The Linux Kernel Modules---------------
+
+A device driver provides an I/O-device specific implementation of the Virtual File System abstraction, and it is located in the kernel space.
+
+A device driver can be: Linked with the Linux Kernel and executed at system bootstrap.
+
+                        Kernel module, which is loaded at runtime through suitable system programs, after the Linux Kernel is booted.
+
+
+We use the following system programs for performing certian operations of : 
+                      mknod  for Creating a Device File. 
+                      insmod for Adding Kernel Module In Linux Kernel.
+                      rmmod  for Removing Kernel Module From Linux Kernel. 
+                      lsmod  for Listing Kernel Modules.
+
+Functions provided by a kernel module:
+
+Initialization function, called upon the execution of the insmod system program, takes care of making Linux aware that a new device driver is available.
+
+Clean-up function, called upon the execution of rmmod, to remove the device driver from the Linux Kernel.
+
+Custom-specific implementations of the VFS abstraction
+
+
+----Linux Kernel Module Initialization Function--------
+
+
+static dev_t dummy_dev;   					// Data structure containing the major number and the first minor number for the module. It identifies
+                          					// univocally the module in the kernel. It shall be used when creating the device file associated with
+                          					// the module.
+
+
+struct cdev dummy_cdev;   					// Data structure used to describe the properties of a character device 
+
+static char buffer[64];               				// Buffer used for displaying output messages on the Linux console
+
+
+struct file_operations dummy_fops = {                   	// Data structure used to associate the VFS functions to their module-specific implementations.
+								// In this example, the read() VFS function is implemented by the dummy_read() function.
+
+    .owner = THIS_MODULE,
+    .read = dummy_read,                                 	// read() VFS function is implemented by dummy_read() function.
+};
+
+static int __init dummy_module_init(void)
+{
+    printk(KERN_INFO "Loading dummy_module\n");                 // Kernel equivalent of the printf().
+
+    alloc_chrdev_region(&dummy_dev, 0, 1, "dummy_dev");         // The module initialization function. It is executed as soon as the module enters the Linux kernel and   								                // takes care of making the Kernel aware that the new module is available.
+                                                                // Where : 	dev is the dynamically-selected major number of the module;
+                                                                //         	0   here is first minor number for the module;
+                                                                //         	1   here is count, informing kernel to reserve above minor number for only this module.
+                                                                // 	dummy_dev   is the name of kernel module.  
+   
+    printk(KERN_INFO "%s\n", format_dev_t(buffer, dummy_dev));  // prints on the Linux console the major number and the minor number associated with the just-registered character device.
+    
+    cdev_init(&dummy_cdev, &dummy_fops);                        // Initializing the character device data structure
+                                                                // where:   cdev   is the structure to initialize 
+                                                                     dummy_fops    is the file_operations for the device.   
+
+    dummy_cdev.owner = THIS_MODULE;                             // Setting the owner of the module using the THIS_MODULE macro.
+
+    cdev_add(&dummy_cdev, dummy_dev, 1);                        // Adding the character device to the Linux Kernel.
+                                                                // Where  dummy_cdev   is a pointer to character device structure which is already initialized
+                                                                //        dummy_dev    is major number of the device.   
+                                                                //            1      is showing that only one i.e. this module is assocaited with this minor number. 
+
+    return 0;                                                   // Indicating the function terminated correctly.  A non zero value indicates an error occurred.
+                           
+
+}
+
+
+
+--------Linux Kernel Module : The Clean Up Function------------
+
+static void __exit dummy_module_cleanup(void)                    
+{
+    printk(KERN_INFO "Cleaning-up dummy_dev.\n");              
+
+    cdev_del(&dummy_cdev);                                       // Removing the character device from the Linux kernel.           
+    unregister_chrdev_region(dummy_dev, 1);                      // Freeing the range of major/minor numbers previously registered.
+}
+
+
+
+-------Linux Kernel Module : Implementation of Read VFS Function In Kernel Module---------
+
+ssize_t dummy_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)      // Where filp is the pointer to the data structure describing the opened file;
+                                                                                          //        buf is the bufer to fill with the data read from the file;
+               									          //        count is the size of the buffer		                                                                                      										          //        f_pos is the current reading position in the file.                                       
+
+{
+    printk(KERN_INFO "Dummy read (count=%d, offser=%d)\n", (int)count, (int)*f_pos );     // printing a message to show that the read functions has been executed.
+
+    return 1;                                                                             // Returning the number of byte read from the file. 
+											  // Returning 0 will block the caller application, which will wait until at least 
+                                                                                          // one byte is returned.
+ 
+}
+
+
+
+
 
