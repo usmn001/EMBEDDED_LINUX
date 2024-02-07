@@ -1,0 +1,529 @@
+Every Embedded Linux Project requires following four components : 
+
+Toolchain : To Compile all the other elements.
+Bootloader : To Initialise the board and load kernel(Application,System Programs,Operating System,Device Tree)
+Kernel : To manage system resources.
+Root filesystem : To Run applications, Container for linux kernel configuration files, system programs, application.
+Device Tree : A tree data structure with nodes informing linux kernel about the connected HW devices enabling proper
+              initialzing of the relevant device drivers.  
+
+A build system such as Yocto or Build root generates the above neccessary components for us.
+
+
+
+---------------------------------------ARM Embedded Linux Online Course-----------------------------
+
+----------------Lec 1 : Introduction------------------
+
+Operating system provides following services : 
+                     System call interface, 
+                     Process Management, 
+                     Memory Management,
+                     Virtual File System,
+                     Device Drivers for I/O Management.
+
+Linux Kernel also provides above same services.
+
+We will prefer LTS i.e. Long terms kernels having long term maintainence.
+
+
+---------------------Lec 2 : Linux Based Embedded Systems--------------------------
+
+The difference between MCU and SoC is that in MCU RAM,ROM(Bootflash),CPU, I/O are all on the same chip .
+                                            In SoC RAM Memory and additional component Mass Memory are not present on the same chip
+                                            while CPI, I/O, Bootflash are present on the same chip.
+
+The kernel modules are loaded into kernel using commands such as insmod or modprobe or maybe autoloaded through modifying a file of Embedded Linux distro.
+
+In Linux based embedded system following components are mandatory : 
+
+Bootloader : To Initialise the board and load kernel(Application,System Programs,Operating System,Device Tree).
+             Bootloader is a software executed at startup , it copies the Application,System Programs,Operating System,
+             Device Tree from Mass Memory Flash to RAM and also initializes RAM Memory controller. 
+
+Device Tree : A tree data structure with nodes informing linux kernel about the connected HW devices enabling proper
+              initialzing of the relevant device drivers. This information is provided to the kernel through 
+              device tree blob file produced from Device tree source file.
+
+ Kernel     : To manage system resources and provide services : Process Management, Memory Management, Scheduling,
+              Inter process communication, I/O Management, File Syste, Networking.
+              Kernel code is Architecture-independent operating system code.
+
+
+System Programs : Provide Status Information, File Modification, Programming Language support, program loading and execution,
+                  Communications, application programs.
+
+Application :  Software required to provide end user service .
+
+Root filesystem : To Run applications, Container for linux kernel configuration files, system programs, application.
+                  Contains first user-level process init.
+
+		/	        # Disk root
+	/bin			# Repository for binary files
+	/lib			# Repository for library files
+	/dev			# Repository for device files
+		console c 5 1	# Console device file
+		null c 1 3	# Null device file
+		zero c 1 5 	# All-zero device file
+		tty c 5 0 	# Serial console device file
+		tty0 c 4 0 	# Serial terminal device file
+		tty1 c 4 1 	#
+		tty2 c 4 2 	#
+		tty3 c 4 3 	#
+		tty4 c 4 4 	#
+		tty5 c 4 5 	#
+	/etc			# Repository for config files
+		inittab		# The inittab
+		/init.d		# Repository for init config files
+			rcS	# The script run at sysinit
+	/proc			# The /proc file system
+	/sbin			# Repository for accessory binary files
+	/tmp			# Repository for temporary files
+	/var			# Repository for optional config files
+	/usr			# Repository for user files
+	/sys			# Repository for system service files
+	/media			# Mount point for removable storage
+
+------------------------Lecture 3 : Anatomy Of Linux Based Embedded System-------------------------
+
+Linux kernel is Monolithic Kernel separated into User and Kernel Space. User and Kernel Space communicate through system calls.
+
+The Kernel can be divided in five subsystems:
+Process scheduler
+Memory manager
+Virtual file system
+Inter-process communication
+Network
+Most of them are composed of:
+Hardware-independent code
+Hardware-dependent code
+
+The MMU (Memory Management Unit Part Of Linux Kernel) detects when a user process accesses a memory address that is not currently mapped to a physical memory location. The MMU notifies the Linux Kernel the event known as page fault
+
+-----Memory Manager External Interfaces------
+
+System call interface:
+malloc()/free(): allocate or free a region of memory for the process's use
+mmap()/munmap()/msync()/mremap(): map files into virtual memory regions
+mprotect(): change the protection on a region of virtual memory
+mlock()/mlockall()/munlock()/munlockall(): super-user routines to prevent memory being swapped
+swapon()/swapoff(): super-user routines to add and remove swap files for the system
+
+
+Intra-Kernel interface:
+kmalloc()/kfree(): allocate and free memory for use by the kernel’s data structures
+verify_area(): verify that a region of user memory is mapped with required permissions
+get_free_page()/free_page(): allocate and free physical memory pages.
+
+
+---------Virtugal File System (VFS)--------------
+
+VFS is responsible for providing : 
+   High Speed access to files
+   Enforces policies not to loose or corrupt data.
+   enforces policies to grant access to files only to allowed users, and it restricts user total file size with quotas.
+External interface:
+System-call interface based on normal operations on file from the POSIX standard (e.g. open/close/read/write)
+Intra-kernel interface based on i-node interface and file interface. 
+The i-node stores all information about a file except it´s data and name, Whenever a file is created it is assigned a name
+and a unique i-node number.
+
+VFS I- Node Interface Provided Functions/API´s : 
+
+create(): creates a file in a directory
+lookup(): finds a file by name within a directory
+link()/symlink()/unlink()/readlink()/follow_link(): manages file system links
+mkdir()/rmdir(): creates or removes sub-directories
+mknod(): creates a directory, special file, or regular file
+
+readpage()/writepage(): reads or writes a page of physical memory
+truncate(): sets the length of a file to zero
+permission(): checks to see if a user process has permission to execute an operation
+smap(): maps a logical file block to a physical device sector
+bmap(): maps a logical file block to a physical device block
+rename(): renames a file or directory
+
+
+VFS File Interface Functions/API´s : 
+
+open()/release(): opens or closes the file
+read()/write(): reads or writes the file
+select(): waits until the file is in a particular state (readable or writeable)
+lseek(): moves to a particular offset in the file
+mmap(): maps a region of the file onto the virtual memory of a user process.
+
+fsync()/fasync(): synchronizes any memory buffers with the physical device
+readdir(): reads the files that are pointed to by a directory file
+ioctl(): sets file attributes
+check_media_change(): checks to see if a removable media has been removed
+revalidate(): verifies that all cached information is valid
+
+
+---Device Drivers----
+Device drivers provide a uniform interface to access hardware devices:
+
+Character-based devices are hardware devices accessed sequentially (e.g. serial port).
+Block-based devices are devices that are accessed randomly and whose data is read/written in blocks (e.g. hard disk unit).
+
+Device drivers use the file interface abstraction of VFS for accessing deice drivers in user space :
+Each device can be accessed as a file in the file system through a special file, the device file, associated with it. 
+A new device driver is a new implementing of the hardware-specific code to customize the file interface abstraction 
+
+
+-----Device Trees--------
+
+In Arm architecture, all device tree source files are now located in either arch/arm/boot/dts or arch/arm64/boot/dts.
+.dts files for board-level definitions
+.dtsi files for included files
+
+A tool, the device tree compiler, compiles the source into a binary form: the device tree blob (DTB).
+The DTB is loaded by the bootloader and parsed by the kernel at boot time.
+Device tree files are not monolithic.  They can be split in several files, including each other.
+
+
+
+------------------------Lec 4 : Configuration and Build Process--------------
+
+
+Building an embedded Linux system is a complex operation.
+
+Multiple sources shall be configured and compiled.
+Root file system shall be updated at each build through a non-trivial task.
+In cases of multiple hw and multiple hw configurations, manual iteration is needed.
+
+Tools, known as build systems, are available to automate such operations.
+
+Build systems takes care of:
+
+Building the cross compiler for the selected embedded system CPU
+Managing bootloader/kernel/system programs configuration
+Managing bootloader/kernel/system program build
+Preparation of the root file system and boot device image preparation
+
+
+----------------Yocto---------------------
+
+Yocto has following features : 
+Provides core recipes and use layers to get support for more packages and more machines.
+In Yocto Custom modifications should stay in a separate layer.
+Versatile build system: tries to be as flexible as possible and to handle most use cases.
+Open community but governed by the Yocto Project Advisory Board.
+
+
+In Yocto the configuration is separated in multiple parts:
+
+.Distribution configuration (general configuration, toolchain selection, etc.)
+
+.Machine configuration (defines the hw architecture, hw features, BSP)
+
+.Image recipe (what system programs should be installed on the target)
+
+.Local configuration (e.g., how many threads to use when compiling, whether to remove build artifacts, etc.)
+
+.Allows to build the same image for different machines or using different distributions or different images for one machine
+
+
+Yocto is Collaboration of multiple projects that make up the “Yocto Project”
+
+Bitbake: build tool.
+
+OpenEmbedded core: software framework used for creating Linux distributions. 
+
+Poky: a reference distribution of the Yocto Project, containing the OpenEmbedded Build System (BitBake and OpenEmbedded Core) and a set of metadata to start building custom embedded Linux systems .
+
+Application Development Toolkit: provides application developer a way to write sw running on the custom-built embedded Linux system without the need for knowing build systems.
+
+---------Yocto Build System------------------
+
+Yocto is composed of several layers : Developer Specific Layer. 
+                                      Commercial Layer from operating system vendor.
+                                      User interface-specific layer.
+                                      Board Support Package layer.
+                                      Yocto-specific layer metadata (meta-yocto).
+                                      OpenEmbedded core metadata (oe-core)
+
+These layers are containers for building blocks of the system.
+These yocto layers do not contain components source code but only meta data i.e. recipes which define how to build outputs
+called packages.
+ 
+------------Yocto Build System Configuration Files-------------
+
+meta/conf/bitbake.conf – default configuration.
+
+build/conf/bblayers.conf – layers to be used during build process.
+
+*/conf/layers.conf – layer configuration. 
+
+
+-----build/conf/local.confl file-----------
+
+used to override the default configuration and define what to build.
+BB_NUMBER_THREADS and PARALLEL_MAKE
+MACHINE settings
+DISTRO settings
+INCOMPATIBLE_LICENSE = “GPLv3”
+EXTRA_IMAGE_FEATURES
+
+Example :   MACHINE ?= "raspberrypi3"
+            PREFERRED_VERSION_linux-raspberrypi = "4.%"
+            DISTRO_FEATURES:remove = "x11 wayland"
+            DISTRO_FEATURES:append = " systemd"
+            VIRTUAL-RUNTIME_init_manager = "systemd"
+            ENABLE_UART = "1
+
+--------build/conf/bblayers.conf file---------
+
+Used to configure which layers to use.
+Add Yocto Project Compatible layers to the BBLAYERS
+Default: meta (oe-core), meta-yocto, and meta-yocto-bsp
+
+Example : 
+
+bblayer.conf (fragment)
+
+BBLAYERS = " \
+  ${BSPDIR}/sources/poky/meta \
+  ${BSPDIR}/sources/poky/meta-yocto \
+  ${BSPDIR}/sources/poky/meta-yocto-bsp \
+  \
+  ${BSPDIR}/sources/meta-openembedded/meta-oe \
+  ${BSPDIR}/sources/meta-openembedded/meta-multimedia \
+  ${BSPDIR}/sources/meta-openembedded/meta-networking \
+  ${BSPDIR}/sources/meta-openembedded/meta-python \
+  \
+  ${BSPDIR}/sources/meta-fsl-arm \
+  ${BSPDIR}/sources/meta-fsl-arm-extra \
+  ${BSPDIR}/sources/meta-fsl-demos \
+  ${BSPDIR}/sources/meta-raspberrypi \
+
+		
+The above Recipes inherit the system configuration and adjust it to describe how to build and package the software.
+Can be extended and enhanced via layers
+Compatible with OpenEmbedded
+
+Example : 
+
+rpi-basic-image.bb (fragment)
+
+# Base this image on rpi-hwup-image
+include rpi-hwup-image.bb
+
+SPLASH = "psplash-raspberrypi"
+
+IMAGE_FEATURES += "ssh-server-dropbear splash"
+
+---------------meta-yocto/conf/distro/poky.conf – distribution policy-----------
+
+----------------meta-yocto-bsp/conf/machine/board-name.conf -----------
+Defines configuration of the board support pacakge. ( Here we add our developed kernel Module)
+Define board specific kernel configuration 
+Processor/SOC Tuning files. 
+Machine configuration refers to kernel sources.
+Compatible with OpenEmbedded.
+
+Example : 
+raspberrypi3.conf (fragment)
+
+#@TYPE: Machine
+#@NAME: RaspberryPi 3 Development Board
+#@DESCRIPTION: Machine configuration for the RaspberryPi 3
+
+MACHINEOVERRIDES = "raspberrypi2:${MACHINE}"
+
+MACHINE_EXTRA_RRECOMMENDS += " kernel-modules wl18xx-conf 
+	uim-sysfs bt-firmware gator"
+
+include conf/machine/raspberrypi2.conf
+
+SERIAL_CONSOLE = "115200 ttyS0"
+
+KERNEL_MODULE_AUTOLOAD += "g_serial hello"
+
+MACHINE_ESSENTIAL_EXTRA_RRECOMMENDS += "kernel-module-gator"
+
+
+----------meta/conf/machine/include/tune-CPU-name.inc – CPU-specific configuration-----------
+
+
+
+------------Build System Workflow Distribution Policy-------------------
+
+Defines distribution policies that affect the way individual recipes are built
+May set alternative preferred versions of recipes
+May enable/disable features
+May configure specific package rules
+May adjust image deployment settings
+Enabled via the DISTRO setting
+
+Four predefined settings:
+poky-bleeding: enables bleeding edge packages
+poky: core distribution definition, defines the base
+poky-lsb: enable items required for LSB support
+poky-tiny: construct a smaller than normal system
+
+
+----------Build System Workflow : Source Fetching--------------
+
+Recipes tell the location of all sources, patches, and files.
+These may exist on the internet or be local (See SRC_URI in the *.bb files).
+Bitbake can get the sources from git, svn, bzr, or tarballs.
+Versions of packages can be fixed or updated automatically (Add SRCREV_pn-PN = “${AUTOREV}” to local.conf).
+
+----------Build System Workflow : Patching--------------
+
+Once sources are obtained, they are extracted.
+Patches are applied in the order they appear in SRC_URI.
+In this stage, application-specific patches are applied.
+Custom modifications to the open-source code that are mandated by the specific application for which the embedded system is intended for.
+
+--------Build System Workflow : Output Analysis------------
+Support the popular formats: RPM, Debian, and ipk.
+Set preferred format using PACKAGE_CLASSES in local.conf 
+Package files can be manually defined to override automatic settings
+
+
+**********Setting Up Yocto In Development PC For Raspberry Pi3*************
+
+We will need to follow same steps if we had other board or any other SoC processor, Following commands download the packages,software,utilties required by Yocto. In the end we clone
+the Yocto poky repository git://git.yoctoproject.org/poky,  open-embedded layer repo git://git.openembedded.org/meta-openembedded ,  meta-raspberrypi layer from git://git.yoctoproject.org/meta-raspberrypi , for other board we will clone other relevant repo. 
+
+
+sudo apt-get install gawk wget git diffstat unzip texinfo gcc-multilib build-essential 
+
+Where   "gawk"            is a programming language to manipulate or extract data, generate reports, match patterns, perform 
+                          calculations, and more, with great flexibility.  https://www.redhat.com/sysadmin/beginners-guide-gawk 
+                    
+       "wget"             is a program for retrieves content from web servers.
+       "diffstat"         is a program that is useful for reviewing large, complex patch files.
+       "texinfo"          generating documentation in both on-line and printed form with a single source file.
+       "gcc-multilib"     useful for cross-compiling a program to run on a different processor architecture.
+       "build-essential"  form of meta-packages that are essential to compile software. They contain the GNU/g++ compiler 
+                          collection, GNU debugger, and a few more libraries and tools that are needed for compiling a program.
+                          https://packages.ubuntu.com/focal/build-essential 
+
+sudo apt-get install chrpath socat libsdl1.2-dev xterm ncurses-dev lzop
+
+Where  "chrpath"         Allows you to modify the dynamic library load path (rpath and runpath) of compiled programs and libraries.
+        "socat"          Allows for bidirectional data transfers from one location to another. https://www.redhat.com/sysadmin/getting-started-socat
+        "libsdl1.2"      A cross-platform development library designed to provide low level access to audio, keyboard, mouse, joystick, and graphics hardware via OpenGL and Direct3D.
+                         https://github.com/libsdl-org/SDL
+
+        "xterm"          Standard terminal emulator of the X Window System, providing a command-line interface within a window.
+        "ncurses-dev"    A programming library providing an application programming interface (API) that allows the programmer to write text-based user interfaces (TUI) in a terminal-
+                         independent manner.
+        "lzop"           A file compressor which is very similar to gzip. https://www.lzop.org/
+
+sudo apt-get install minicom u-boot-tools curl  
+
+Where   "minicom"       A serial communication program that connects to devices through a GNU/Linux PC's serial ports. https://wiki.emacinc.com/wiki/Getting_Started_With_Minicom
+        "u-boot-tools"  Includes programs for generating and listing U-Boot(Bootloader) images in various formats:  - mkimage    - dumpimage   - mksunxiboot    - mkenvimage
+                        https://packages.debian.org/sid/u-boot-tools
+        
+         "curl"         Library and command-line tool for transferring data using various network protocols. https://curl.se/
+
+
+mkdir ~/bin
+Install the repo Utility  :  curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+
+Where  "repo"           Utility is used To simplify fetching sources and setting up the Yocto build environment we have decided to use the Google repo 248 tool, which allows fetching  
+                        sources from multiple location in a single command based on manifest files (xml).   https://hub.mender.io/t/google-repo/58
+                        
+
+ 
+***************Setting Up Yocto*************** 
+
+The following steps information is also available here : https://docs.yoctoproject.org/brief-yoctoprojectqs/index.html
+
+i).  git clone git://git.yoctoproject.org/poky 
+
+Where "poky" is a reference distribution provided by Yocto, it can be customized through recipes according to a certain application and target hardware.
+ 
+ii). git clone git://git.openembedded.org/meta-openembedded
+
+Where "OpenEmbedded" is a build framework of recipes and packages. OpenEmbedded supports many hardware architectures with cross-compilation infrastructure.
+
+iii). git clone git://git.yoctoproject.org/meta-raspberrypi
+
+Where meta-raspberrypi is a layer providing recipe for generating embedded linux targetting raspberry pi SoC and board.
+
+*********To establish Ethernet Connection With Our Raspberry Pi Board ********
+
+Edit the poky/meta/recipes-core/init-ifupdown/init-ifupdown-1.0/interfaces file and add following lines 
+
+iface eth0 inet static
+        address 192.168.1.2
+        netmask 255.255.255.0
+        gateway 192.168.1.1
+        network 192.168.1.0
+ 
+
+iv). source poky/oe-init-build-env rpi-build
+     Configured the Yocto environment to build the poky (embedded linux ) source for Raspberry Pi3, Where we are already in Yocto directory containing all the layers.
+                    
+The mentioned poky source was cloned earlier from git clone git://git.yoctoproject.org/poky
+The Yocto Project has extensive documentation about OE including a reference
+manual which can be found at:
+    https://docs.yoctoproject.org
+
+For more information about OpenEmbedded see the website:
+    https://www.openembedded.org/
+
+
+### Shell environment set up for builds. ###
+
+You can now run 'bitbake <target>'
+
+Common targets are:
+    core-image-minimal
+    core-image-full-cmdline
+    core-image-sato
+    core-image-weston
+    meta-toolchain
+    meta-ide-support
+
+You can also run generated qemu images with a command like 'runqemu qemux86-64'.
+
+Other commonly useful commands are:
+ - 'devtool' and 'recipetool' handle common recipe tasks
+ - 'bitbake-layers' handles common layer tasks
+ - 'oe-pkgdata-util' handles common target package tasks
+
+v) . Edit the local.conf file accordingly 
+
+Example :
+MACHINE ?= "raspberrypi3"
+PREFERRED_VERSION_linux-raspberrypi = "4.%"
+DISTRO_FEATURES:append = " systemd x11 wayland"
+VIRTUAL-RUNTIME_init_manager = "systemd"
+ENABLE_UART = "1
+
+vi). Add the relevant layers in bblayers.conf file 
+
+Example : 
+POKY_BBLAYERS_CONF_VERSION = "2"
+
+BBPATH = "${TOPDIR}"
+BBFILES ?= ""
+
+BBLAYERS ?= " \
+  /opt/Yocto/poky/meta \
+  /opt/Yocto/poky/meta-poky \
+  /opt/Yocto/poky/meta-yocto-bsp \
+  /opt/Yocto/meta-openembedded/meta-oe \
+  /opt/Yocto/meta-openembedded/meta-python \
+  /opt/Yocto/meta-openembedded/meta-multimedia \
+  /opt/Yocto/meta-raspberrypi \
+:
+
+ Where  meta-raspberrypi :  layer is used to build embedded linux image for raspberry pi board .     https://meta-raspberrypi.readthedocs.io/en/latest/readme.html
+     
+vii). Building the image for raspberry pi 3
+bibake core-image-sato
+
+
+Encountered Issues During Yocto Based Linux Image Build For Raspberry Pi3 : https://askubuntu.com/questions/162391/how-do-i-fix-my-locale-issue
+                                                                            https://askubuntu.com/questions/599808/cannot-set-lc-ctype-to-default-locale-no-such-file-or-directory
+                                                                            https://github.com/crops/poky-container/issues/67
+                                                                            https://docs.yoctoproject.org/next/migration-guides/migration-3.4.html
+                                                        Yocto is migrated : https://low-level.wiki/yocto/honister-upgrade.html
+
