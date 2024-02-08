@@ -671,7 +671,7 @@ struct file_operations dummy_fops = {                   	// Data structure used 
 
     .owner = THIS_MODULE,
     .read = dummy_read,                                 	// read() VFS function is implemented by dummy_read() function.
-};
+};                                                              // read() VFS function is used at User level application.
 
 static int __init dummy_module_init(void)
 {
@@ -729,6 +729,379 @@ ssize_t dummy_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
                                                                                           // one byte is returned.
  
 }
+
+
+-----------------------------------------------Lecture 6 : Communication Between Kernel and User Space--------------------------------------------------
+
+When designing an application that communicates with custom hardware, two levels shall be considered:
+
+User level, where the behavior of the application is defined using virtual file system (VFS) calls to communicate with the hardware.
+Module level, where the behavior of each VFS function is implemented based upon the functionalities the hardware implements.
+
+Different hardware may require different implementations of the same VFS function.
+At the user-level, the programmer shall be aware of the functionalities the hardware provides, and shall use the VFS calls accordingly.
+
+-------------The CPU/Device Interface-----------
+
+Memory mapped: each register is associated to an address.
+Through GPIO, where each register is associated to a set of GPIOs.
+
+The module-level implementation will be affected by the adopted CPU/Device Interface.
+The user-level implementation will abstract these details
+
+------------The Module Level----------------
+
+At this level, the different functionalities of the device shall be enumerated, and an association shall be established with the VFS functionalities.
+In our example, the device L supports the following functionalities:
+
+Reset: L is disabled, and the blink rate register is set to zero.  
+                       Here Both the blink rate and enable registers are set to zero. This operation is done once, when starting using the device.
+
+Program: The blink rate register is set to a user-defined value.
+                      The blink rate register is set to a user defined value. This operation can be done multiple times, during the device usage
+
+Enable: L is enabled.
+                     The enable register is set to one. This operation can be done multiple times, during the device usage
+
+Disable: L is disabled.
+                    The enable register is set to zero. This operation can be done multiple times, during the device usage
+
+Poll rate: L returns the content of the blink rate register.
+                    The blink rate register content is provided to the user level. This operation can be done multiple times, during the device usage.
+
+
+Poll state: L returns the content of the enable register.
+                    The enable register content is provided to the user level. This operation can be done multiple times, during the device usage
+
+Power-off: L terminates its operation and starts waiting for the next reset.
+                    The enable register content is set to zero. This operation is done once, after the last usage of the device.
+
+
+The virtual file system functions that are typically used are:
+
+open, which initiates the operations with the device
+
+release, which terminates the operation with the device
+
+write, which sends data coming from the user space to the device
+
+read, which reads from the device and send them to the user space
+
+ioctl, which performs custom operations
+
+
+Relationship Between VFS Functions and Module Level Functions is : 
+
+Device Function             VFS Function
+
+Reset        <---------->    Open           Used for establishing connection with the device.
+
+Power-off    <---------->    release        for terminating the connection with device.
+
+Poll state   <---------->    read           Used to send data from device to application, Enable register is selected as target for read operation using ioctl() function.
+
+Poll rate    <---------->    read           Used to send data from device to application, Blink rate register is selected as target for read operation using ioctl() function.
+
+Disable      <---------->    write          Used to send data to the device and Enable register is selected as target for read operation using ioctl() function.
+
+Enable       <---------->    write          Used to send data to the device and Enable register is selected as target for write operation using ioctl() function.
+
+Program      <---------->    write          Used to send data to the device and Blink Rate register is selected as target for write operation using ioctl() function.
+       
+
+----------Structure for definining File Operations In Kernel Module-----------
+
+static dev_t L_dev;
+
+struct cdev L_cdev;
+
+struct file_operations L_fops = {
+
+    .owner 	= THIS_MODULE,
+    .open 	= L_open_close,
+    .release 	= L_open_close,
+    .write 	= L_write,
+    .read 	= L_read,
+    .ioctl 	= L_ioctl,
+
+};
+
+
+-------The Module Level: ioctl() Implementation-----------
+
+static ssize_t L_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigned long arg)
+{ 
+  switch( cmd )
+  {
+    case BLINK_RATE:				// global symbol previously defined
+      selected_register = BLINK_RATE;		// global variable previously defined
+      break;
+    case ENABLE:					// global symbol previously defined
+      selected_register = ENABLE;
+      break;
+  }	
+
+  return 0;
+} 
+----------------The Module Level: open()/release() Implementation----------
+
+It disables the device and sets the blink rate to zero. The same operations are valid for open() and release() functions.
+
+static int L_open_close(struct inode *inode, struct file *file)
+{ 
+  selected_register = ENABLE;			// it selects the target for read/write operation.
+  WRITE_DATA_TO_THE_HW( 0 );			// it sends 0 to the enable register.
+						// it abstracts the low-level CPU/device L interface.
+
+  selected_register = BLINK_RATE;			// it selects the target for read/write operation.
+  WRITE_DATA_TO_THE_HW( 0 );			// it sends 0 to the blink register.
+	
+  return 0;
+} 
+----------------------The Module Level: read() Implementation--------------------
+
+It reads from the ioctl() selected register and pass the data to the user.
+
+static ssize_t L_read(struct file *filp, char *buffer, size_t length, loff_t * offset) 
+{ 
+  int data;
+
+  READ_DATA_FROM_THE_HW( &data );			// it abstracts the low-level CPU/device L interface.
+  copy_to_user(buffer, &data, 4 );			// see next slide
+
+  return 4; 					// it returns the number of bytes read.
+}
+
+
+------------------Passing Data to/from the Kernel----------------
+
+Kernel and application are running in two different memory spaces.
+Specific functions are needed to move data between them.
+
+    copy_to_user(void __user *to, const void *from, unsigned long n);    //Move data from kernel space to user space.
+
+
+--------------The Module Level: write() Implementation---------------
+
+static ssize_t L_write(struct file *filp, char *buffer, size_t length, loff_t * offset)  // writes to ioctl() selected register
+{ 
+  WRITE_DATA_TO_THE_HW( buffer );		
+	
+  return 1; 
+}
+
+
+-----------------The Module Level: Communication with the Device--------------------
+
+Hidden in implementation of functions : READ_DATA_FROM_THE_HW() , WRITE_DATA_TO_HW()
+
+Implementation depends on the CPU/Device L connection
+
+Memory mapped example:
+Blink rate register: 0xf0080000
+Enable register:     0xf0080004
+
+GPIO example:
+Blink rate register: GPIO(0-31) (MSB first)
+Enable register: GPIO(32)
+
+
+----------------------Memory Mapped I/0 Implementation Of Kernel Module Device Read, Write Funtions---------------------------
+
+
+Memory areas can be used if:
+Available
+Reserved
+
+Following Functions required for Memory Mapped I/O based Implementation of read and write data to/from  device at kernel Module level
+
+int check_region( unsigned long first, unsigned long n)                      //It checks whether the desired addresses are available
+int request_region( unsigned long first, unsigned long n, const char *name)  // It reserves the desired addresses
+int release_region( unsigned long first, unsigned long n)                    // It sets the desired addresses free
+
+
+----------Memory Mapped I/O Module Initialization Function------------
+
+static int __init L_module_init(void)
+{
+  int res;
+  alloc_chrdev_region(&L_dev, 0, 1, ”L_dev");
+  printk(KERN_INFO "%s\n", format_dev_t(buffer, L_dev));
+  cdev_init(&L_cdev, &L_fops);
+  L_cdev.owner = THIS_MODULE;
+  cdev_add(&L_cdev, L_dev, 1);
+
+  r = check_region( ioremap(0xf0080000, 4 ), 8 );      // ioremap() Translates the physical address of the device (as defined by the memory map) into the corresponding virtual address.
+  if(r) {
+   printk( KERN_ALERT ”Unable to reserve I/O memory\n");
+   return –EINVAL;
+  }
+  request_region(ioremap(0xf0080000, 4), 8, ”DevL");
+  return 0;
+}
+
+
+---------Mmeory Mapped I/O Clean Up Function-------------
+
+static void __exit L_module_cleanup(void)
+{
+  cdev_del(&L_cdev);
+  unregister_chrdev_region(L_dev, 1);
+
+  release_region(ioremap(0xf0080000, 4 ), 8);
+}
+
+---------Mmeory Mapped I/O Read Function-------------
+
+int	READ_DATA_FROM_THE_HW( int *data )
+{
+  int	tmp;
+
+  switch( selected_register )
+  {
+    case BLINK_RATE:
+      tmp = inl( ioremap(0xf0080000, 4) );	        // inl(): it reads 32-bit words, 
+                                                        // inw(): it reads 16-bit words. 
+                                                        // inb(): it reads 8-bit words.
+      break;
+    case ENABLE:
+      tmp = inl( ioremap(0xf0080000, 4)+4 );
+      break;
+    }
+    *data = tmp;
+
+    return 4;
+}
+
+
+---------Mmeory Mapped I/O Write Function-------------
+
+int	WRITE_DATA_TO_THE_HW( char *data )
+{
+  switch( selected_register )
+  {
+    case BLINK_RATE:
+      outl( (int)*data, ioremap(0xf0080000, 4) );	// outl(): it write 32-bit words, 
+                                                        // outw(): it write 16-bit words. 
+                                                        // outb(): it writes 8-bit words.
+      break;
+    case ENABLE:
+      outl( (int)*data, ioremap(0xf0080000, 4)+4 );
+      break;
+    }
+    
+    return 4;
+}
+
+
+----------------------GPIO I/0 Implementation Of Kernel Module Device Read, Write Funtions---------------------------
+
+Prior to GPIO use, it shall be reserved for the module.
+
+int gpio_request(unsigned gpio, const char *label)       //It checks whether the desired GPIO is available, and if yes, reserves it.
+void gpio_free(unsigned gpio)                            // It sets the desired GPIO free.
+
+----------GPIO I/O Module Initialization Function------------
+
+static int __init L_module_init(void)
+{
+  int i, r;
+  alloc_chrdev_region(&L_dev, 0, 1, ”L_dev");
+  printk(KERN_INFO "%s\n", format_dev_t(buffer, L_dev));
+  cdev_init(&L_cdev, &L_fops);
+  L_cdev.owner = THIS_MODULE;
+  cdev_add(&L_cdev, L_dev, 1);
+
+  for( i = 0; i < 32; i++ ) {                           
+  
+    r = gpio_request( i );                                // GPIO shall be checked and reserved one by one.
+    if (r) { 
+      printk( KERN_ALERT ”Unable to reserve GPIO\n");
+      return –EINVAL;
+    }
+  }
+  return 0;
+}
+
+
+----------GPIO I/O Module  Clean Up Function------------
+
+static void __exit L_module_cleanup(void)
+{
+  int i;
+  
+  cdev_del(&L_cdev);
+  unregister_chrdev_region(L_dev, 1);
+
+  for( i = 0; i < 32; i++ )
+    gpio_free( i );                                      // GPIO shall be freed one by one.
+
+}
+
+----------GPIO I/O Module Read() Function------------
+
+
+
+int	READ_DATA_FROM_THE_HW( int *data )
+{
+  int	tmp = 0, i;
+
+  switch( selected_register )
+  {
+    case BLINK_RATE:
+      for( i = 0; i < 31; i++ ) {
+        gpio_direction_input( i );                     // GPIO direction shall be set to input.
+      
+        tmp = (tmp << 1) | gpio_get_value( i );        // GPIO value shall be read one by one. The resulting word is built MSB first.
+
+      }
+      break;
+    case ENABLE:
+      gpio_direction_input( 32 );
+      tmp |= gpio_get_value( 32 )
+      break;
+    }
+    *data = tmp;
+
+    return 4;
+}
+
+----------GPIO I/O Module Write() Function------------
+
+int	WRITE_DATA_TO_THE_HW( int data )
+{
+  int	i;
+  switch( selected_register ) {
+    case BLINK_RATE:
+      for( i = 0; i < 31; i++ ) {
+        gpio_direction_output( i, 0 );                // GPIO direction shall be set to output, with default value on the GPIO set to 0.
+
+        gpio_set_value( i, (data & (1 << i)) );       // GPIO value shall be written one by one.
+
+      }
+      break;
+    case ENABLE:
+      gpio_direction_output( 32, 0 );
+      gpio_set_value( 32, data & 0x00000001 );
+      break;
+  }
+
+  return 4;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
